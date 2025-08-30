@@ -1,0 +1,10 @@
+^C:\USERS\ACER\DOCUMENTS\WORKSPACE\PROJECTS\DATASTRUCTURE\PATHFINDING-VISUALIZER\BUILT\CMAKEFILES\BC3BD2B9EB2A3A63B0CDC6CB6C13EF4E\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/ACER/Documents/Workspace/Projects/DataStructure/pathfinding-visualizer -BC:/Users/ACER/Documents/Workspace/Projects/DataStructure/pathfinding-visualizer/built --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/ACER/Documents/Workspace/Projects/DataStructure/pathfinding-visualizer/built/Project.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

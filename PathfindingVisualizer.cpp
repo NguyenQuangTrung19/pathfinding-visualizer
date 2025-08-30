@@ -18,11 +18,9 @@
 #endif
 
 // --- Phần Tiện ích (Utilities) ---
-// Tách các hàm không thuộc lớp nào ra riêng
 namespace util {
     void clearScreen() {
     #ifdef _WIN32
-        // Sử dụng API của Windows để tránh gọi system(), an toàn và nhanh hơn
         HANDLE hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
         COORD coord = {0, 0};
         DWORD count;
@@ -34,10 +32,44 @@ namespace util {
         std::cout << "\033[2J\033[1;1H";
     #endif
     }
+
+    // *** THAY ĐỔI 1: Hàm nhập liệu an toàn ***
+    int getSafeIntegerInput() {
+        int choice;
+        while (!(std::cin >> choice)) {
+            std::cout << "Nhap lieu khong hop le. Vui long nhap mot so: ";
+            std::cin.clear(); // Xóa trạng thái lỗi của cin
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); // Loại bỏ input sai
+        }
+        return choice;
+    }
 }
 
 // --- Phần Cấu trúc Dữ liệu (Data Structures) ---
-using Point = std::pair<int, int>;
+
+// *** THAY ĐỔI 2: Dùng struct Point thay cho std::pair ***
+struct Point {
+    int r, c;
+
+    // Toán tử so sánh bằng (đã có)
+    bool operator==(const Point& other) const {
+        return r == other.r && c == other.c;
+    }
+
+    // Toán tử so sánh khác (đã có)
+     bool operator!=(const Point& other) const {
+        return !(*this == other);
+    }
+    
+    // *** THÊM TOÁN TỬ NÀY VÀO ***
+    // Cần thiết cho priority_queue để phá vỡ thế hòa (tie-break)
+    bool operator<(const Point& other) const {
+        if (r != other.r) {
+            return r < other.r;
+        }
+        return c < other.c;
+    }
+};
 
 struct Node {
     bool is_wall = false;
@@ -56,7 +88,6 @@ private:
     Point start_pos;
     Point end_pos;
 
-    // Sửa: Hàm này chỉ nên được gọi từ bên trong lớp
     void carvePath(int r, int c, std::mt19937& rng) {
         grid_data[r][c].is_wall = false;
         int dr[] = {-2, 2, 0, 0};
@@ -75,7 +106,6 @@ private:
     }
 
 public:
-    // Sửa: Thêm `explicit` để tránh chuyển đổi kiểu ngầm
     explicit Grid(int r, int c) : rows(r), cols(c) {
         if (r <= 0 || c <= 0) {
             throw std::invalid_argument("Rows and cols must be positive.");
@@ -83,7 +113,6 @@ public:
         grid_data.resize(rows, std::vector<Node>(cols));
     }
     
-    // Sửa: Thêm const cho các hàm không thay đổi trạng thái của đối tượng
     int getRows() const { return rows; }
     int getCols() const { return cols; }
     Point getStart() const { return start_pos; }
@@ -136,6 +165,20 @@ public:
 };
 
 // --- Lớp Visualizer: Chỉ chịu trách nhiệm hiển thị ---
+#ifdef _WIN32
+// *** THAY ĐỔI 3: Loại bỏ Magic Numbers cho màu sắc ***
+namespace ConsoleColor {
+    const int DEFAULT = 7;
+    const int WALL = 8;
+    const int START = 10;       // Green
+    const int END = 11;         // Cyan
+    const int PATH = 12;        // Red
+    const int VISITED = 13;     // Magenta
+    const int PROCESSING = 14;  // Yellow
+    const int WEIGHTED = 6;     // Brown/Dark Yellow
+}
+#endif
+
 class Visualizer {
 private:
 #ifdef _WIN32
@@ -151,11 +194,10 @@ public:
     void printState(const Grid& grid, const Point* current_processing = nullptr, const std::vector<Point>* path = nullptr) {
         if (current_processing != nullptr) util::clearScreen();
 
-        // Sửa: Tối ưu việc kiểm tra điểm có thuộc đường đi không
         std::vector<std::vector<bool>> is_on_path(grid.getRows(), std::vector<bool>(grid.getCols(), false));
         if (path) {
             for (const auto& p : *path) {
-                is_on_path[p.first][p.second] = true;
+                is_on_path[p.r][p.c] = true;
             }
         }
 
@@ -167,21 +209,22 @@ public:
                 const Node& node = grid.getNode(r, c);
                 
                 #ifdef _WIN32
-                int color = 7; // Mặc định
-                if (r == start.first && c == start.second) color = 10;
-                else if (r == end.first && c == end.second) color = 11;
-                else if (is_on_path[r][c]) color = 12;
-                else if (current_processing && r == current_processing->first && c == current_processing->second) color = 14;
-                else if (node.is_wall) color = 8;
-                else if (node.visited) color = 13;
-                else if (node.weight > 1) color = 6;
+                // Sử dụng hằng số màu đã định danh
+                int color = ConsoleColor::DEFAULT;
+                if (r == start.r && c == start.c) color = ConsoleColor::START;
+                else if (r == end.r && c == end.c) color = ConsoleColor::END;
+                else if (is_on_path[r][c]) color = ConsoleColor::PATH;
+                else if (current_processing && r == current_processing->r && c == current_processing->c) color = ConsoleColor::PROCESSING;
+                else if (node.is_wall) color = ConsoleColor::WALL;
+                else if (node.visited) color = ConsoleColor::VISITED;
+                else if (node.weight > 1) color = ConsoleColor::WEIGHTED;
                 SetConsoleTextAttribute(hConsole, color);
                 #endif
 
-                if (r == start.first && c == start.second) std::cout << "S ";
-                else if (r == end.first && c == end.second) std::cout << "E ";
+                if (r == start.r && c == start.c) std::cout << "S ";
+                else if (r == end.r && c == end.c) std::cout << "E ";
                 else if (is_on_path[r][c]) std::cout << "* ";
-                else if (current_processing && r == current_processing->first && c == current_processing->second) std::cout << "o ";
+                else if (current_processing && r == current_processing->r && c == current_processing->c) std::cout << "o ";
                 else if (node.is_wall) std::cout << "# ";
                 else if (node.visited) std::cout << "+ ";
                 else if (node.weight > 1) std::cout << "~ ";
@@ -191,30 +234,31 @@ public:
         }
         
         #ifdef _WIN32
-        SetConsoleTextAttribute(hConsole, 7);
+        SetConsoleTextAttribute(hConsole, ConsoleColor::DEFAULT);
         #endif
 
         if (current_processing) {
-            std::cout << "Dang xet o: (" << current_processing->first << ", " << current_processing->second << ")\n";
+            std::cout << "Dang xet o: (" << current_processing->r << ", " << current_processing->c << ")\n";
         }
     }
 
-    void printFinalPath(Grid& grid) {
+    void printFinalPath(const Grid& grid) {
         std::vector<Point> path;
         Point current = grid.getEnd();
         Point start = grid.getStart();
+        Point invalid_parent = {-1, -1};
         
-        while (current.first != -1) {
+        while (current != invalid_parent) {
             path.push_back(current);
             if (current == start) break;
-            current = grid.getNode(current.first, current.second).parent;
+            current = grid.getNode(current.r, current.c).parent;
         }
         
         std::this_thread::sleep_for(std::chrono::seconds(1));
         util::clearScreen();
         std::cout << "\n--- DUONG DI TIM THAY ---\n";
         printState(grid, nullptr, &path);
-        std::cout << "Tong chi phi (cost): " << grid.getNode(grid.getEnd().first, grid.getEnd().second).g_score << '\n';
+        std::cout << "Tong chi phi (cost): " << grid.getNode(grid.getEnd().r, grid.getEnd().c).g_score << '\n';
     }
 };
 
@@ -223,7 +267,7 @@ namespace Pathfinder {
     using PQElement = std::pair<int, Point>;
     
     int heuristic(const Point& a, const Point& b) {
-        return std::abs(a.first - b.first) + std::abs(a.second - b.second);
+        return std::abs(a.r - b.r) + std::abs(a.c - b.c);
     }
 
     bool findPathAStar(Grid& grid, Visualizer& visualizer, bool isDijkstra) {
@@ -231,7 +275,7 @@ namespace Pathfinder {
         Point start = grid.getStart();
         Point end = grid.getEnd();
         
-        grid.getNode(start.first, start.second).g_score = 0;
+        grid.getNode(start.r, start.c).g_score = 0;
         
         std::priority_queue<PQElement, std::vector<PQElement>, std::greater<PQElement>> pq;
         int h_start = isDijkstra ? 0 : heuristic(start, end);
@@ -244,23 +288,23 @@ namespace Pathfinder {
             Point current_pos = pq.top().second;
             pq.pop();
 
-            if (grid.getNode(current_pos.first, current_pos.second).visited) continue;
+            if (grid.getNode(current_pos.r, current_pos.c).visited) continue;
             
-            grid.getNode(current_pos.first, current_pos.second).visited = true;
+            grid.getNode(current_pos.r, current_pos.c).visited = true;
             visualizer.printState(grid, &current_pos);
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             
             if (current_pos == end) return true;
 
             for (int i = 0; i < 4; ++i) {
-                Point neighbor_pos = {current_pos.first + dr[i], current_pos.second + dc[i]};
+                Point neighbor_pos = {current_pos.r + dr[i], current_pos.c + dc[i]};
                 
-                if (grid.isValid(neighbor_pos.first, neighbor_pos.second) && !grid.getNode(neighbor_pos.first, neighbor_pos.second).is_wall) {
-                    int weight = grid.getNode(neighbor_pos.first, neighbor_pos.second).weight;
-                    int tentative_g_score = grid.getNode(current_pos.first, current_pos.second).g_score + weight;
+                if (grid.isValid(neighbor_pos.r, neighbor_pos.c) && !grid.getNode(neighbor_pos.r, neighbor_pos.c).is_wall) {
+                    int weight = grid.getNode(neighbor_pos.r, neighbor_pos.c).weight;
+                    int tentative_g_score = grid.getNode(current_pos.r, current_pos.c).g_score + weight;
 
-                    if (tentative_g_score < grid.getNode(neighbor_pos.first, neighbor_pos.second).g_score) {
-                        Node& neighbor_node = grid.getNode(neighbor_pos.first, neighbor_pos.second);
+                    if (tentative_g_score < grid.getNode(neighbor_pos.r, neighbor_pos.c).g_score) {
+                        Node& neighbor_node = grid.getNode(neighbor_pos.r, neighbor_pos.c);
                         neighbor_node.parent = current_pos;
                         neighbor_node.g_score = tentative_g_score;
                         int h_score = isDijkstra ? 0 : heuristic(neighbor_pos, end);
@@ -279,8 +323,8 @@ namespace Pathfinder {
 
         std::queue<Point> q;
         q.push(start);
-        grid.getNode(start.first, start.second).visited = true;
-        grid.getNode(start.first, start.second).g_score = 0;
+        grid.getNode(start.r, start.c).visited = true;
+        grid.getNode(start.r, start.c).g_score = 0;
         
         const int dr[] = {-1, 1, 0, 0};
         const int dc[] = {0, 0, -1, 1};
@@ -294,14 +338,14 @@ namespace Pathfinder {
             if (current_pos == end) return true;
 
             for (int i = 0; i < 4; ++i) {
-                int next_r = current_pos.first + dr[i];
-                int next_c = current_pos.second + dc[i];
+                int next_r = current_pos.r + dr[i];
+                int next_c = current_pos.c + dc[i];
                 
                 if (grid.isValid(next_r, next_c) && !grid.getNode(next_r, next_c).is_wall && !grid.getNode(next_r, next_c).visited) {
                     Node& neighbor_node = grid.getNode(next_r, next_c);
                     neighbor_node.visited = true;
                     neighbor_node.parent = current_pos;
-                    neighbor_node.g_score = grid.getNode(current_pos.first, current_pos.second).g_score + 1;
+                    neighbor_node.g_score = grid.getNode(current_pos.r, current_pos.c).g_score + 1;
                     q.push({next_r, next_c});
                 }
             }
@@ -317,8 +361,7 @@ int main() {
     std::cout << "1. Load maze tu file\n";
     std::cout << "2. Tao maze ngau nhien\n";
     std::cout << "Lua chon cua ban: ";
-    int main_choice;
-    std::cin >> main_choice;
+    int main_choice = util::getSafeIntegerInput(); // Sử dụng hàm nhập an toàn
 
     int ROWS, COLS;
     std::vector<std::string> maze_layout;
@@ -328,8 +371,7 @@ int main() {
         std::cout << "1. Maze co ban (maze.txt)\n";
         std::cout << "2. Maze co trong so (maze_weighted.txt)\n";
         std::cout << "Lua chon: ";
-        int file_choice;
-        std::cin >> file_choice;
+        int file_choice = util::getSafeIntegerInput(); // Sử dụng hàm nhập an toàn
         std::string filename = (file_choice == 2) ? "maze_weighted.txt" : "maze.txt";
         
         std::ifstream maze_file(filename);
@@ -366,8 +408,7 @@ int main() {
     std::cout << "2. Dijkstra's Algorithm (Tinh trong so)\n";
     std::cout << "3. A* Search (Tinh trong so, hieu qua)\n";
     std::cout << "Lua chon cua ban: ";
-    int algo_choice;
-    std::cin >> algo_choice;
+    int algo_choice = util::getSafeIntegerInput(); // Sử dụng hàm nhập an toàn
 
     bool path_found = false;
     switch(algo_choice) {
